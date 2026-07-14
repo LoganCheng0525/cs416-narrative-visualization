@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>2017 Automobile Efficiency Narrative</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://rawgit.com/susielu/d3-annotation/master/d3-annotation.min.js"></script>
+    
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 40px; 
+            background-color: #f4f7f6; 
+            color: #333;
+        }
+        #container { 
+            max-width: 900px; 
+            margin: auto; 
+            background: white; 
+            padding: 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+        }
+        h1 { margin-top: 0; }
+        .button-container { 
+            margin: 20px 0; 
+            display: flex;
+            gap: 10px;
+        }
+        button { 
+            padding: 10px 20px; 
+            font-size: 16px; 
+            cursor: pointer; 
+            border: none;
+            border-radius: 6px;
+            background-color: #0275d8;
+            color: white;
+            transition: background-color 0.2s;
+        }
+        button:hover { background-color: #025aa5; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        
+        .tooltip { 
+            position: absolute; 
+            padding: 12px; 
+            background: rgba(30, 30, 30, 0.95); 
+            color: white; 
+            border-radius: 6px; 
+            font-size: 14px; 
+            pointer-events: none; 
+            opacity: 0; 
+            transition: opacity 0.2s;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            line-height: 1.5;
+        }
+        .annotation-note-title { font-weight: bold; fill: #d9534f; font-size: 14px; }
+        .annotation-note-label { fill: #555; font-size: 12px; }
+        .annotation-connector { stroke: #d9534f; stroke-width: 1.5px; }
+    </style>
+</head>
+<body>
+
+<div id="container">
+    <h1>Fuel Efficiency vs. Engine Size (2017)</h1>
+    
+    <p id="narrative-text" style="font-size: 18px; min-height: 80px; line-height: 1.6;"></p>
+    
+    <div class="button-container">
+        <button id="back-btn" onclick="changeScene(-1)">Back</button>
+        <button id="next-btn" onclick="changeScene(1)">Next</button>
+    </div>
+
+    <svg id="chart" width="800" height="500"></svg>
+</div>
+
+<div id="tooltip" class="tooltip"></div>
+
+<script>
+// --- PARAMETERS & STATE ---
+const state = {
+    currentScene: 1,
+    data: []
+};
+
+// Layout constants
+const margin = {top: 40, right: 40, bottom: 60, left: 60};
+const width = 800 - margin.left - margin.right;
+const height = 500 - margin.top - margin.bottom;
+
+// Setup SVG group
+const svg = d3.select("#chart")
+    .append("g")
+    .attr("transform", `translate(${margin.left},${margin.top})`);
+
+// Define Scales globally so all scenes can use them consistently
+const xScale = d3.scaleLinear().domain([-1, 13]).range([0, width]); // Cylinders range from 0 to 12
+const yScale = d3.scaleLinear().domain([0, 140]).range([height, 0]); // MPG ranges up to 133
+
+// --- STEP 1: LOAD DATA & INITIALIZE ---
+d3.csv("cars2017.csv").then(function(loadedData) {
+    // Parse strings into numbers
+    state.data = loadedData.map(d => {
+        d.EngineCylinders = +d.EngineCylinders;
+        d.AverageHighwayMPG = +d.AverageHighwayMPG;
+        return d;
+    });
+
+    // Draw static chart infrastructure (Axes)
+    svg.append("g")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(xScale).tickValues([0, 2, 3, 4, 6, 8, 10, 12]));
+        
+    svg.append("g").call(d3.axisLeft(yScale));
+
+    // Axis Labels
+    svg.append("text")
+        .attr("x", width/2)
+        .attr("y", height + 40)
+        .style("text-anchor", "middle")
+        .style("font-weight", "bold")
+        .text("Engine Cylinders");
+
+    svg.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("x", -height/2)
+        .attr("y", -40)
+        .style("text-anchor", "middle")
+        .style("font-weight", "bold")
+        .text("Average Highway MPG");
+
+    // Plot initial circles (data items)
+    svg.selectAll("circle")
+        .data(state.data)
+        .enter()
+        .append("circle")
+        .attr("cx", d => xScale(d.EngineCylinders))
+        .attr("cy", d => yScale(d.AverageHighwayMPG))
+        .attr("r", 6)
+        .attr("stroke", "#fff")
+        .attr("stroke-width", 1);
+
+    // Render the first scene
+    drawScene();
+});
+
+// --- STEP 2: THE SCENE CONTROLLER ---
+function drawScene() {
+    // Clear any previous annotations
+    svg.selectAll(".annotation-group").remove();
+    
+    // Update button states based on scene parameter
+    d3.select("#back-btn").property("disabled", state.currentScene === 1);
+    d3.select("#next-btn").text(state.currentScene === 3 ? "Start Over" : "Next");
+
+    if (state.currentScene === 1) {
+        // SCENE 1: The Macro Trend
+        d3.select("#narrative-text").html("<strong>Scene 1: The Baseline.</strong> As a general rule of traditional combustion engines, more cylinders mean more power but significantly lower fuel efficiency. Notice the steep drop-off in miles per gallon (MPG) as cylinder count increases from 3 to 12.");
+        
+        // Reset all dots to standard blue look
+        svg.selectAll("circle")
+            .transition().duration(750)
+            .attr("fill", "steelblue")
+            .attr("opacity", 0.7);
+
+        // Turn off tooltips for now (Author-led)
+        svg.selectAll("circle")
+            .on("mouseover", null)
+            .on("mouseout", null)
+            .style("cursor", "default");
+
+        // Set up Scene 1 Annotation
+        renderAnnotation([{
+            note: { title: "The Dropoff", label: "Efficiency is lost rapidly as cylinder count grows." },
+            x: xScale(8), y: yScale(22), dx: 40, dy: -40
+        }]);
+    } 
+    else if (state.currentScene === 2) {
+        // SCENE 2: Highlighting the Electric Outliers
+        d3.select("#narrative-text").html("<strong>Scene 2: Eliminating the Cylinder.</strong> At exactly 0 cylinders sit pure Electric Vehicles (EVs). By ditching the traditional engine entirely, they shatter the standard efficiency scale, achieving over 100 MPG-equivalent.");
+
+        // Visual highlighting: Fade out combustion cars, highlight electrics
+        svg.selectAll("circle")
+            .transition().duration(750)
+            .attr("fill", d => d.EngineCylinders === 0 ? "#5cb85c" : "#999")
+            .attr("opacity", d => d.EngineCylinders === 0 ? 1.0 : 0.15);
+
+        svg.selectAll("circle")
+            .on("mouseover", null)
+            .on("mouseout", null)
+            .style("cursor", "default");
+
+        // Set up Scene 2 Annotation
+        renderAnnotation([{
+            note: { title: "The Outliers", label: "Electric cars skip the curve entirely with 0 cylinders." },
+            x: xScale(0), y: yScale(109), dx: 60, dy: 10
+        }]);
+    } 
+    else if (state.currentScene === 3) {
+        // SCENE 3: Open Exploration
+        d3.select("#narrative-text").html("<strong>Scene 3: Explore the Data.</strong> Color is now determined by Fuel Type (<span style='color:#5cb85c; font-weight:bold;'>Green = Electricity</span>, <span style='color:#0275d8; font-weight:bold;'>Blue = Gasoline</span>, <span style='color:#f0ad4e; font-weight:bold;'>Orange = Diesel</span>). Hover over individual data points to reveal the manufacturers and specific vehicle specs.");
+
+        // Color code by fuel type
+        svg.selectAll("circle")
+            .transition().duration(750)
+            .attr("opacity", 0.8)
+            .attr("fill", d => {
+                if(d.Fuel === "Electricity") return "#5cb85c";
+                if(d.Fuel === "Diesel") return "#f0ad4e";
+                return "#0275d8"; // Gasoline
+            });
+
+        // TRIGGERS: Enable tooltips on hover
+        const tooltip = d3.select("#tooltip");
+        svg.selectAll("circle")
+            .style("cursor", "pointer") // Affordance for clicking/hovering
+            .on("mouseover", function(event, d) {
+                tooltip.style("opacity", 1)
+                       .html(`<strong>${d.Make}</strong><br>Fuel: ${d.Fuel}<br>Cylinders: ${d.EngineCylinders}<br>HWY MPG: ${d.AverageHighwayMPG}`)
+                       .style("left", (event.pageX + 15) + "px")
+                       .style("top", (event.pageY - 28) + "px");
+                d3.select(this)
+                  .transition().duration(100)
+                  .attr("stroke", "#000")
+                  .attr("stroke-width", 2)
+                  .attr("r", 9);
+            })
+            .on("mouseout", function() {
+                tooltip.style("opacity", 0);
+                d3.select(this)
+                  .transition().duration(100)
+                  .attr("stroke", "#fff")
+                  .attr("stroke-width", 1)
+                  .attr("r", 6);
+            });
+            
+        renderAnnotation([{
+            note: { title: "Your Turn", label: "Hover over points to compare vehicle brands and fuel types." },
+            x: xScale(4), y: yScale(40), dx: 50, dy: -60
+        }]);
+    }
+}
+
+// --- STEP 3: NAVIGATION TRIGGER LOGIC ---
+function changeScene(direction) {
+    if (state.currentScene === 3 && direction === 1) {
+        state.currentScene = 1; // Loop back to start if "Start Over" is clicked
+    } else {
+        state.currentScene += direction;
+    }
+    drawScene();
+}
+
+// Helper function to build annotations cleanly using d3-annotation
+function renderAnnotation(annotationsArray) {
+    const makeAnnotations = d3.annotation()
+        .type(d3.annotationCalloutElbow)
+        .annotations(annotationsArray);
+        
+    svg.append("g")
+       .attr("class", "annotation-group")
+       .call(makeAnnotations);
+}
+</script>
+</body>
+</html>
